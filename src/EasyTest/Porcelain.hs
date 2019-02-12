@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 
 module EasyTest.Porcelain
   ( -- * Tests
@@ -27,6 +28,7 @@ module EasyTest.Porcelain
   , skip
   , crash
   , note
+  , testProperty
   ) where
 
 import           Control.Monad.Reader
@@ -43,6 +45,9 @@ import           EasyTest.Internal
 
 import Hedgehog hiding (Test)
 
+import Hedgehog.Internal.Show (showPretty)
+import Hedgehog.Internal.Source (withFrozenCallStack)
+import Hedgehog.Internal.Property (failDiff, failWith)
 
 expect :: (HasCallStack) => Bool -> Test ()
 expect False = crash "unexpected"
@@ -69,10 +74,24 @@ expectLeftNoShow (Right _) = crash $ "expected Left, got Right"
 expectLeftNoShow (Left _)  = ok
 
 expectEq :: (Eq a, Show a, HasCallStack) => a -> a -> Test ()
-expectEq a b = testProperty $ property' $ a === b
+expectEq x y = testProperty $ property' $ do -- testProperty $ property' $ x === y
+  ok <- withFrozenCallStack $ eval (x == y)
+  if ok then
+    success
+  else
+    withFrozenCallStack $ failDiff x y
 
 expectNeq :: (Eq a, Show a, HasCallStack) => a -> a -> Test ()
-expectNeq a b = testProperty $ property' $ a === b
+expectNeq x y = testProperty $ property' $ do
+  ok <- withFrozenCallStack $ eval (x /= y)
+  if ok then
+    success
+  else
+    withFrozenCallStack $
+      failWith Nothing $ unlines [
+          "━━━ Both equal to ━━━"
+        , showPretty x
+        ]
 
 -- | Run a list of tests
 --
